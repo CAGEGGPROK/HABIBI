@@ -11,7 +11,7 @@ import '../../data/storage/user_storage.dart';
 import '../../data/storage/customization_storage.dart';
 import '../../services/task_service.dart';
 import '../../services/stats_service.dart';
-import '../widgets/customizable_character.dart';
+import '../widgets/realistic_3d_character.dart';
 import '../widgets/stat_bar.dart';
 import '../widgets/task_card.dart';
 import '../widgets/level_progress_bar.dart';
@@ -316,7 +316,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                               return Transform.scale(
                                 scale: _avatarAnimation.value,
                                 child: _customization != null
-                                    ? CustomizableCharacter(
+                                    ? Realistic3DCharacter(
                                         customization: _customization!,
                                         size: 150,
                                       )

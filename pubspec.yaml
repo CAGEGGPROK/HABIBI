@@ -9,35 +9,20 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  
-  # UI и навигация
-  cupertino_icons: ^1.0.6
-  
-  # Локальное хранение
   hive: ^2.2.3
   hive_flutter: ^1.1.0
-  
-  # Работа с изображениями
-  image_picker: ^1.0.4
-  cached_network_image: ^3.3.0
-  
-  # HTTP запросы для API
-  dio: ^5.3.2
-  
-  # Управление состоянием
-  provider: ^6.0.5
-  
-  # Утилиты
-  path_provider: ^2.1.1
+  provider: ^6.1.1
+  image_picker: ^1.0.7
+  dio: ^5.4.0
+  path_provider: ^2.1.2
   path: ^1.8.3
-  intl: ^0.18.1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^2.0.3
   hive_generator: ^2.0.1
-  build_runner: ^2.4.6
+  build_runner: ^2.4.7
+  flutter_lints: ^3.0.0
 
 flutter:
   uses-material-design: true
