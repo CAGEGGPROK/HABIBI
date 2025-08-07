@@ -64,4 +64,13 @@ flutter {
     source '../..'
 }
 
+android {
+    compileSdkVersion 34
+    
+    defaultConfig {
+        minSdkVersion 21  // Минимум для WebView
+        targetSdkVersion 34
+    }
+}
+
 dependencies {}

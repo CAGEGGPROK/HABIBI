@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Habit Rpg</string>
+	<string>Habit RPG</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -45,9 +45,14 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
-	<!-- Добавить в Info.plist перед закрывающим </dict> -->
-
-	<!-- Разрешение на сетевые запросы -->
+	
+	<!-- Разрешения для камеры и фото -->
+	<key>NSCameraUsageDescription</key>
+	<string>Это приложение использует камеру для создания аватара персонажа</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Это приложение использует фотогалерею для выбора изображения аватара</string>
+	
+	<!-- Поддержка HTTPS и HTTP для Ready Player Me -->
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
@@ -67,20 +72,12 @@
 			<dict>
 				<key>NSExceptionAllowsInsecureHTTPLoads</key>
 				<true/>
+				<key>NSExceptionMinimumTLSVersion</key>
+				<string>TLSv1.0</string>
 				<key>NSIncludesSubdomains</key>
 				<true/>
 			</dict>
 		</dict>
 	</dict>
-
-	<!-- Поддержка камеры и фото (если нужно) -->
-	<key>NSCameraUsageDescription</key>
-	<string>Приложение использует камеру для создания аватара</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Приложение использует галерею для создания аватара</string>
-
-	<!-- Поддержка файловой системы -->
-	<key>NSDocumentsFolderUsageDescription</key>
-	<string>Приложение сохраняет 3D модели аватаров</string>
 </dict>
 </plist>

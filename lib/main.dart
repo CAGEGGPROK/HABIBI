@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart'
+    show kIsWeb, kDebugMode, defaultTargetPlatform, TargetPlatform;
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
 

@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart'
+    show kIsWeb, kDebugMode, defaultTargetPlatform, TargetPlatform;
 import 'package:provider/provider.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import '../../core/constants/app_colors.dart';
@@ -8,6 +10,7 @@ import '../../services/rpm_service.dart';
 import '../../data/models/user_model.dart';
 import '../../data/storage/user_storage.dart';
 import '../../services/stats_service.dart';
+import '../widgets/webview_helper.dart';
 
 /// Экран создания аватара Ready Player Me с WebView
 class RPMCreatorScreen extends StatefulWidget {
@@ -23,6 +26,7 @@ class _RPMCreatorScreenState extends State<RPMCreatorScreen> {
   bool _isCreatingAvatar = false;
   String? _errorMessage;
   String _userName = '';
+  bool _isInitialized = false;
 
   @override
   void initState() {
@@ -31,99 +35,125 @@ class _RPMCreatorScreenState extends State<RPMCreatorScreen> {
   }
 
   /// Инициализация WebView
-  void _initializeWebView() {
-    final rpmService = context.read<RPMService>();
-    final rpmUrl = rpmService.getRPMConstructorUrl();
+  void _initializeWebView() async {
+    try {
+      // Проверяем поддержку WebView
+      final isSupported = await WebViewHelper.isWebViewSupported();
+      if (!isSupported) {
+        setState(() {
+          _errorMessage = 'WebView не поддерживается на этом устройстве';
+        });
+        return;
+      }
 
-    _webViewController = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(AppColors.background)
-      ..setNavigationDelegate(
-        NavigationDelegate(
+      final rpmService = context.read<RPMService>();
+
+      // Выбираем URL в зависимости от конфигурации
+      String rpmUrl;
+      if (rpmService.isConfigured) {
+        rpmUrl = rpmService.getRPMConstructorUrl();
+        debugPrint('Используем настроенный RPM URL');
+      } else {
+        rpmUrl = rpmService.getPublicDemoUrl();
+        debugPrint('Используем публичный демо URL');
+      }
+
+      // Используем helper для создания контроллера
+      _webViewController = await WebViewHelper.createRPMWebViewController(
+        navigationDelegate: NavigationDelegate(
           onPageStarted: (String url) {
-            setState(() {
-              _isPageLoaded = false;
-              _errorMessage = null;
-            });
+            debugPrint('Страница начала загружаться: $url');
+            if (mounted) {
+              setState(() {
+                _isPageLoaded = false;
+                _errorMessage = null;
+              });
+            }
           },
           onPageFinished: (String url) {
-            setState(() {
-              _isPageLoaded = true;
-            });
-            _injectJavaScript();
+            debugPrint('Страница загружена: $url');
+            if (mounted) {
+              setState(() {
+                _isPageLoaded = true;
+              });
+              // Задержка перед инжектом JS для уверенности что страница готова
+              Future.delayed(const Duration(milliseconds: 1000), () {
+                _injectJavaScript();
+              });
+            }
           },
           onWebResourceError: (WebResourceError error) {
-            setState(() {
-              _errorMessage = 'Ошибка загрузки: ${error.description}';
-            });
+            final errorMessage = WebViewHelper.getErrorMessage(error);
+            debugPrint('Ошибка загрузки: $errorMessage');
+            if (mounted) {
+              setState(() {
+                _errorMessage = errorMessage;
+              });
+            }
+          },
+          onNavigationRequest: (NavigationRequest request) {
+            debugPrint('Запрос навигации: ${request.url}');
+            return NavigationDecision.navigate;
           },
         ),
-      )
-      ..addJavaScriptChannel(
-        'FlutterApp',
         onMessageReceived: (JavaScriptMessage message) {
+          debugPrint('Получено сообщение от WebView: ${message.message}');
           _handleRPMMessage(message.message);
         },
-      )
-      ..loadRequest(Uri.parse(rpmUrl));
+      );
+
+      // Загружаем URL после инициализации
+      try {
+        await _webViewController.loadRequest(Uri.parse(rpmUrl));
+        debugPrint('URL успешно загружен: $rpmUrl');
+      } catch (e) {
+        debugPrint('Ошибка загрузки URL: $e');
+        setState(() {
+          _errorMessage = 'Ошибка загрузки Ready Player Me: $e';
+        });
+        return;
+      }
+
+      setState(() {
+        _isInitialized = true;
+      });
+    } catch (e) {
+      debugPrint('Ошибка инициализации WebView: $e');
+      setState(() {
+        _errorMessage = 'Ошибка инициализации WebView: $e';
+      });
+    }
+  }
+
+  /// Загрузка URL Ready Player Me
+  void _loadRPMUrl(String url) {
+    try {
+      debugPrint('Загружаем RPM URL: $url');
+
+      // Если WebView еще не инициализирован, инициализируем его
+      if (!_isInitialized) {
+        _initializeWebView();
+        return;
+      }
+
+      _webViewController.loadRequest(Uri.parse(url));
+    } catch (e) {
+      debugPrint('Ошибка загрузки URL: $e');
+      setState(() {
+        _errorMessage = 'Ошибка загрузки URL: $e';
+      });
+    }
   }
 
   /// Внедрение JavaScript для обработки событий RPM
   void _injectJavaScript() {
-    const jsCode = '''
-      (function() {
-        console.log('Flutter RPM Integration: Injecting JavaScript');
-        
-        // Функция для отправки сообщений в Flutter
-        function sendToFlutter(data) {
-          if (window.FlutterApp && window.FlutterApp.postMessage) {
-            window.FlutterApp.postMessage(JSON.stringify(data));
-          }
-        }
-        
-        // Обработчик событий от Ready Player Me
-        window.addEventListener('message', function(event) {
-          console.log('RPM Event received:', event);
-          
-          if (!event.data) return;
-          
-          try {
-            let data = event.data;
-            if (typeof data === 'string') {
-              data = JSON.parse(data);
-            }
-            
-            console.log('Processed RPM data:', data);
-            
-            // Отправляем все события в Flutter
-            sendToFlutter({
-              eventName: data.eventName || 'unknown',
-              data: data.data || data,
-              source: 'rpm'
-            });
-            
-          } catch (e) {
-            console.error('Error processing RPM event:', e);
-            sendToFlutter({
-              eventName: 'error',
-              data: { error: e.message },
-              source: 'rpm'
-            });
-          }
-        });
-        
-        // Уведомляем Flutter о готовности
-        sendToFlutter({
-          eventName: 'webview.ready',
-          data: { status: 'ready' },
-          source: 'flutter'
-        });
-        
-        console.log('Flutter RPM Integration: JavaScript injection complete');
-      })();
-    ''';
-
-    _webViewController.runJavaScript(jsCode);
+    try {
+      final jsCode = WebViewHelper.getRPMIntegrationScript();
+      _webViewController.runJavaScript(jsCode);
+      debugPrint('JavaScript успешно внедрен');
+    } catch (e) {
+      debugPrint('Ошибка внедрения JavaScript: $e');
+    }
   }
 
   /// Обработка сообщений от RPM
@@ -148,30 +178,70 @@ class _RPMCreatorScreenState extends State<RPMCreatorScreen> {
           debugPrint('WebView готов к работе с RPM');
           break;
 
+        case 'postMessage':
+          _handlePostMessage(data['data']);
+          break;
+
         case 'error':
           _handleError(data['data']['error'] ?? 'Неизвестная ошибка');
           break;
 
         default:
           debugPrint('Неизвестное RPM событие: $eventName');
+          // Пытаемся обработать как прямое событие аватара
+          if (data['data'] != null && data['data']['url'] != null) {
+            await _handleAvatarExported(data['data']);
+          }
       }
     } catch (e) {
       debugPrint('Ошибка парсинга RPM сообщения: $e');
-      _handleError('Ошибка обработки данных от RPM');
+      // Пытаемся обработать как прямую строку URL
+      if (message.contains('models.readyplayer.me') &&
+          message.contains('.glb')) {
+        await _handleAvatarExported({'url': message});
+      } else {
+        _handleError('Ошибка обработки данных от RPM: $e');
+      }
+    }
+  }
+
+  /// Обработка postMessage событий
+  void _handlePostMessage(dynamic data) {
+    debugPrint('PostMessage data: $data');
+
+    // Проверяем, есть ли URL аватара в данных
+    if (data is Map && data['url'] != null) {
+      _handleAvatarExported(data);
+    } else if (data is String && data.contains('models.readyplayer.me')) {
+      _handleAvatarExported({'url': data});
     }
   }
 
   /// Обработка экспорта аватара
   Future<void> _handleAvatarExported(dynamic data) async {
+    if (!mounted) return;
+
     setState(() {
       _isCreatingAvatar = true;
     });
 
     try {
-      final avatarUrl = data['url'] as String?;
+      String? avatarUrl;
+
+      if (data is Map) {
+        avatarUrl = data['url'] as String?;
+      } else if (data is String) {
+        avatarUrl = data;
+      }
 
       if (avatarUrl == null || avatarUrl.isEmpty) {
         throw Exception('Не получен URL аватара от Ready Player Me');
+      }
+
+      // Проверяем, что URL валидный
+      if (!avatarUrl.contains('models.readyplayer.me') ||
+          !avatarUrl.endsWith('.glb')) {
+        throw Exception('Неверный формат URL аватара: $avatarUrl');
       }
 
       debugPrint('Получен RPM аватар: $avatarUrl');
@@ -188,6 +258,7 @@ class _RPMCreatorScreenState extends State<RPMCreatorScreen> {
         _showSuccessDialog();
       }
     } catch (e) {
+      debugPrint('Ошибка сохранения аватара: $e');
       if (mounted) {
         setState(() {
           _isCreatingAvatar = false;
@@ -205,35 +276,42 @@ class _RPMCreatorScreenState extends State<RPMCreatorScreen> {
 
   /// Создание пользователя с RPM аватаром
   Future<void> _createUserWithRPMAvatar(String avatarUrl) async {
-    // Извлекаем ID аватара из URL
-    final avatarId = _extractAvatarId(avatarUrl);
+    try {
+      // Извлекаем ID аватара из URL
+      final avatarId = _extractAvatarId(avatarUrl);
 
-    // Используем имя из поля или дефолтное
-    final userName = _userName.isNotEmpty ? _userName : 'RPM Игрок';
+      // Используем имя из поля или дефолтное
+      final userName = _userName.isNotEmpty ? _userName : 'RPM Игрок';
 
-    final user = UserModel(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      name: userName,
-      createdAt: DateTime.now(),
-      rpmAvatarUrl: avatarUrl,
-      rpmAvatarId: avatarId,
-      useRpmAvatar: true,
-    );
+      final user = UserModel(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        name: userName,
+        createdAt: DateTime.now(),
+        rpmAvatarUrl: avatarUrl,
+        rpmAvatarId: avatarId,
+        useRpmAvatar: true,
+      );
 
-    await UserStorage.saveUser(user);
+      await UserStorage.saveUser(user);
+      debugPrint('Пользователь с RPM аватаром сохранен');
 
-    // Инициализируем статистику
-    if (mounted) {
-      final statsService = context.read<StatsService>();
-      await statsService.initializeStats(user.id);
+      // Инициализируем статистику
+      if (mounted) {
+        final statsService = context.read<StatsService>();
+        await statsService.initializeStats(user.id);
+        debugPrint('Статистика инициализирована');
+      }
+
+      // Обновляем RPM сервис
+      final rpmService = context.read<RPMService>();
+      await rpmService.handleWebViewMessage({
+        'eventName': 'v1.avatar.exported',
+        'data': {'url': avatarUrl}
+      });
+    } catch (e) {
+      debugPrint('Ошибка создания пользователя: $e');
+      rethrow;
     }
-
-    // Обновляем RPM сервис
-    final rpmService = context.read<RPMService>();
-    await rpmService.handleWebViewMessage({
-      'eventName': 'v1.avatar.exported',
-      'data': {'url': avatarUrl}
-    });
   }
 
   /// Извлечение ID аватара из URL
@@ -241,14 +319,18 @@ class _RPMCreatorScreenState extends State<RPMCreatorScreen> {
     try {
       final uri = Uri.parse(url);
       final fileName = uri.pathSegments.last;
-      return fileName.replaceAll('.glb', '');
+      final id = fileName.replaceAll('.glb', '');
+      debugPrint('Извлечен ID аватара: $id');
+      return id;
     } catch (e) {
+      debugPrint('Ошибка извлечения ID: $e');
       return 'avatar-${DateTime.now().millisecondsSinceEpoch}';
     }
   }
 
   /// Обработка ошибок
   void _handleError(String error) {
+    debugPrint('RPM Error: $error');
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -318,7 +400,7 @@ class _RPMCreatorScreenState extends State<RPMCreatorScreen> {
 
   /// Показ диалога ввода имени
   void _showNameDialog() {
-    final nameController = TextEditingController();
+    final nameController = TextEditingController(text: _userName);
 
     showDialog(
       context: context,
@@ -331,6 +413,7 @@ class _RPMCreatorScreenState extends State<RPMCreatorScreen> {
             border: OutlineInputBorder(),
           ),
           autofocus: true,
+          maxLength: 20,
         ),
         actions: [
           TextButton(
@@ -343,12 +426,33 @@ class _RPMCreatorScreenState extends State<RPMCreatorScreen> {
                 _userName = nameController.text.trim();
               });
               Navigator.pop(context);
+
+              // Показываем подтверждение
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                      'Имя установлено: ${_userName.isEmpty ? "RPM Игрок" : _userName}'),
+                  backgroundColor: AppColors.success,
+                ),
+              );
             },
             child: const Text('Сохранить'),
           ),
         ],
       ),
     );
+  }
+
+  /// Перезагрузка страницы
+  void _reloadPage() {
+    if (_isInitialized) {
+      setState(() {
+        _errorMessage = null;
+        _isPageLoaded = false;
+      });
+      final rpmService = context.read<RPMService>();
+      _loadRPMUrl(rpmService.getRPMConstructorUrl());
+    }
   }
 
   @override
@@ -368,9 +472,18 @@ class _RPMCreatorScreenState extends State<RPMCreatorScreen> {
         actions: [
           // Кнопка для ввода имени
           IconButton(
-            icon: const Icon(Icons.person_outline),
+            icon: Icon(
+              _userName.isNotEmpty ? Icons.person : Icons.person_outline,
+              color: _userName.isNotEmpty ? Colors.amber : Colors.white,
+            ),
             onPressed: _showNameDialog,
             tooltip: 'Имя персонажа',
+          ),
+          // Кнопка перезагрузки
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _reloadPage,
+            tooltip: 'Перезагрузить',
           ),
           // Кнопка справки
           IconButton(
@@ -385,7 +498,7 @@ class _RPMCreatorScreenState extends State<RPMCreatorScreen> {
           return Stack(
             children: [
               // WebView с Ready Player Me
-              if (_errorMessage == null) ...[
+              if (_errorMessage == null && _isInitialized) ...[
                 WebViewWidget(controller: _webViewController),
 
                 // Индикатор загрузки страницы
@@ -406,6 +519,14 @@ class _RPMCreatorScreenState extends State<RPMCreatorScreen> {
                             style: TextStyle(
                               color: AppColors.textSecondary,
                               fontSize: 16,
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          Text(
+                            'Это может занять несколько секунд',
+                            style: TextStyle(
+                              color: AppColors.textHint,
+                              fontSize: 14,
                             ),
                           ),
                         ],
@@ -476,56 +597,151 @@ class _RPMCreatorScreenState extends State<RPMCreatorScreen> {
 
   /// Экран ошибки
   Widget _buildErrorScreen() {
+    final rpmService = context.read<RPMService>();
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.error_outline,
-              size: 64,
-              color: AppColors.error,
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Ошибка загрузки Ready Player Me',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.api_rounded,
+                size: 64,
+                color: AppColors.warning,
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _errorMessage ?? 'Неизвестная ошибка',
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 16,
+              const SizedBox(height: 16),
+              const Text(
+                'Настройка Ready Player Me',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: () {
-                setState(() {
-                  _errorMessage = null;
-                });
-                _initializeWebView();
-              },
-              icon: const Icon(Icons.refresh),
-              label: const Text('Попробовать снова'),
-            ),
-            const SizedBox(height: 16),
-            TextButton(
-              onPressed: () {
-                Navigator.pushReplacementNamed(context, AppRoutes.createAvatar);
-              },
-              child: const Text('Использовать встроенный редактор'),
-            ),
-          ],
+              const SizedBox(height: 8),
+              Text(
+                _errorMessage ??
+                    'Для работы с Ready Player Me необходима настройка API',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 16,
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Инструкции по настройке
+              if (!rpmService.isConfigured) ...[
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppColors.warning.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border:
+                        Border.all(color: AppColors.warning.withOpacity(0.3)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '📋 Инструкция по настройке:',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      ...rpmService.getSetupInstructions().map(
+                            (instruction) => Padding(
+                              padding: const EdgeInsets.only(bottom: 4),
+                              child: Text(
+                                instruction,
+                                style: const TextStyle(fontSize: 14),
+                              ),
+                            ),
+                          ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        '📂 Файл конфигурации: lib/core/config/rpm_config.dart',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // Кнопка для пробной версии
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _tryPublicDemo,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    icon: const Icon(Icons.play_arrow),
+                    label: const Text('Попробовать демо-версию'),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+
+              // Кнопка повтора
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      _errorMessage = null;
+                    });
+                    _initializeWebView();
+                  },
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Попробовать снова'),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Альтернативный вариант
+              TextButton(
+                onPressed: () {
+                  Navigator.pushReplacementNamed(
+                      context, AppRoutes.createAvatar);
+                },
+                child: const Text('Использовать встроенный редактор'),
+              ),
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  /// Попробовать публичную демо-версию
+  void _tryPublicDemo() {
+    setState(() {
+      _errorMessage = null;
+      _isPageLoaded = false;
+      _isInitialized = false;
+    });
+
+    // Показываем сообщение о загрузке демо
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Загружаем демо-версию Ready Player Me...'),
+        backgroundColor: AppColors.primary,
+        duration: Duration(seconds: 2),
+      ),
+    );
+
+    // Перезапускаем WebView с демо URL
+    _initializeWebView();
   }
 
   /// Диалог справки
@@ -539,23 +755,32 @@ class _RPMCreatorScreenState extends State<RPMCreatorScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
+                '🎯 Пошаговая инструкция:',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              SizedBox(height: 12),
+              Text(
                 '1. Выберите пол персонажа\n'
                 '2. Настройте внешность:\n'
                 '   • Форму лица и цвет кожи\n'
                 '   • Прическу и цвет волос\n'
-                '   • Черты лица\n'
+                '   • Черты лица и глаза\n'
                 '   • Одежду и аксессуары\n'
                 '3. Нажмите "Next" или "Done"\n'
                 '4. Дождитесь сохранения аватара',
-                style: TextStyle(fontSize: 16),
+                style: TextStyle(fontSize: 15),
               ),
               SizedBox(height: 16),
               Text(
-                'После создания аватар автоматически сохранится в вашем профиле.',
-                style: TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 14,
-                ),
+                '💡 Советы:',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              SizedBox(height: 8),
+              Text(
+                '• Установите имя персонажа через кнопку профиля\n'
+                '• Если страница не загружается - нажмите обновить\n'
+                '• Аватар автоматически сохранится в игре',
+                style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
               ),
             ],
           ),

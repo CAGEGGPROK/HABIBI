@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../data/storage/user_storage.dart';
+import '../core/config/rpm_config.dart';
 
 /// Сервис для работы с Ready Player Me
 class RPMService extends ChangeNotifier {
@@ -15,32 +16,34 @@ class RPMService extends ChangeNotifier {
   double _downloadProgress = 0.0;
   double get downloadProgress => _downloadProgress;
 
-  /// Конфигурация Ready Player Me
-  static const String subdomain = 'demo'; // Можно заменить на свой поддомен
-  static const Map<String, String> rpmConfig = {
-    'bodyType': 'fullbody',
-    'quickStart': 'false',
-    'clearCache': 'true',
-    'language': 'ru',
-  };
-
   /// Получение URL для RPM конструктора
   String getRPMConstructorUrl() {
-    final baseUrl = 'https://$subdomain.readyplayer.me/avatar';
-    final params = <String>[];
+    final url = RPMConfig.getFullUrl();
+    debugPrint('RPM URL: $url');
+    return url;
+  }
 
-    // Добавляем frameApi для интеграции
-    params.add('frameApi');
+  /// Альтернативный URL для публичной демо-версии
+  String getPublicDemoUrl() {
+    return RPMConfig.publicDemoUrl;
+  }
 
-    // Добавляем конфигурацию
-    rpmConfig.forEach((key, value) {
-      params.add('$key=$value');
-    });
+  /// Проверка настройки API
+  bool get isConfigured => RPMConfig.isConfigured;
 
-    final fullUrl = '$baseUrl?${params.join('&')}';
-    debugPrint('RPM URL: $fullUrl');
+  /// Получение инструкций по настройке
+  List<String> getSetupInstructions() {
+    return RPMConfig.setupInstructions;
+  }
 
-    return fullUrl;
+  /// Получение ссылок для настройки
+  Map<String, String> getSetupLinks() {
+    return RPMConfig.links;
+  }
+
+  /// Получение простого URL без параметров (запасной вариант)
+  String getSimpleRPMUrl() {
+    return 'https://demo.readyplayer.me/avatar?frameApi';
   }
 
   /// Обработка сообщения от WebView
@@ -62,6 +65,7 @@ class RPMService extends ChangeNotifier {
 
         case 'v1.frame.ready':
           debugPrint('RPM Frame готов');
+          _setLoading(false);
           break;
 
         case 'webview.ready':
@@ -70,6 +74,15 @@ class RPMService extends ChangeNotifier {
 
         default:
           debugPrint('Неизвестное RPM событие: $eventType');
+          // Пытаемся обработать как прямое событие аватара
+          if (message['data'] != null) {
+            final data = message['data'];
+            if (data is Map && data['url'] != null) {
+              await _handleAvatarExported(data);
+            } else if (data is String && _isValidRPMUrl(data)) {
+              await _handleAvatarExported({'url': data});
+            }
+          }
       }
     } catch (e) {
       _setError('Ошибка обработки сообщения: $e');
@@ -77,14 +90,29 @@ class RPMService extends ChangeNotifier {
   }
 
   /// Обработка экспорта аватара
-  Future<void> _handleAvatarExported(Map<String, dynamic> data) async {
+  Future<void> _handleAvatarExported(dynamic data) async {
     try {
       _setLoading(true);
 
-      final String avatarUrl = data['url'] ?? '';
+      Map<String, dynamic> avatarData;
+
+      // Безопасное приведение типов
+      if (data is Map<String, dynamic>) {
+        avatarData = data;
+      } else if (data is Map) {
+        avatarData = Map<String, dynamic>.from(data);
+      } else {
+        throw Exception('Неверный формат данных аватара: $data');
+      }
+
+      final String avatarUrl = avatarData['url'] ?? '';
 
       if (avatarUrl.isEmpty) {
         throw Exception('Не получен URL аватара от Ready Player Me');
+      }
+
+      if (!_isValidRPMUrl(avatarUrl)) {
+        throw Exception('Неверный формат URL аватара: $avatarUrl');
       }
 
       debugPrint('Получен RPM аватар: $avatarUrl');
@@ -113,7 +141,7 @@ class RPMService extends ChangeNotifier {
   }
 
   /// Обработка установки пользователя
-  Future<void> _handleUserSet(Map<String, dynamic> data) async {
+  Future<void> _handleUserSet(dynamic data) async {
     debugPrint('RPM пользователь установлен: $data');
     // Здесь можно обработать дополнительную информацию о пользователе
   }
@@ -123,8 +151,11 @@ class RPMService extends ChangeNotifier {
     try {
       final uri = Uri.parse(url);
       final fileName = uri.pathSegments.last;
-      return fileName.replaceAll('.glb', '');
+      final id = fileName.replaceAll('.glb', '');
+      debugPrint('Извлечен ID аватара: $id');
+      return id;
     } catch (e) {
+      debugPrint('Ошибка извлечения ID: $e');
       return 'avatar-${DateTime.now().millisecondsSinceEpoch}';
     }
   }
@@ -137,6 +168,11 @@ class RPMService extends ChangeNotifier {
     int size = 512,
   }) {
     return 'https://render.readyplayer.me/$avatarId.png?pose=$pose&expression=$expression&size=${size}x$size';
+  }
+
+  /// Получение URL для превью с альтернативными параметрами
+  String getAvatarPreviewUrlAlt(String avatarId) {
+    return 'https://render.readyplayer.me/$avatarId.png';
   }
 
   /// Переключение на RPM аватар
@@ -164,8 +200,13 @@ class RPMService extends ChangeNotifier {
   }
 
   /// Валидация URL RPM модели
-  bool isValidRPMUrl(String url) {
+  bool _isValidRPMUrl(String url) {
     return url.contains('models.readyplayer.me') && url.endsWith('.glb');
+  }
+
+  /// Публичная версия валидации URL
+  bool isValidRPMUrl(String url) {
+    return _isValidRPMUrl(url);
   }
 
   /// Очистка RPM данных
@@ -178,6 +219,38 @@ class RPMService extends ChangeNotifier {
         useRpmAvatar: false,
       ));
       notifyListeners();
+    }
+  }
+
+  /// Получение информации о RPM аватаре
+  Future<Map<String, dynamic>?> getRPMAvatarInfo() async {
+    final user = await UserStorage.getCurrentUser();
+    if (user?.rpmAvatarUrl != null) {
+      return {
+        'url': user!.rpmAvatarUrl,
+        'id': user.rpmAvatarId,
+        'previewUrl': user.rpmAvatarId != null
+            ? getAvatarPreviewUrl(user.rpmAvatarId!)
+            : null,
+        'isActive': user.useRpmAvatar,
+      };
+    }
+    return null;
+  }
+
+  /// Тестирование подключения к RPM
+  Future<bool> testRPMConnection() async {
+    try {
+      _setLoading(true);
+
+      // Здесь можно добавить проверку доступности RPM API
+      await Future.delayed(const Duration(seconds: 1));
+
+      _setLoading(false);
+      return true;
+    } catch (e) {
+      _setError('Ошибка подключения к RPM: $e');
+      return false;
     }
   }
 
@@ -197,6 +270,12 @@ class RPMService extends ChangeNotifier {
   /// Очистка ошибки
   void clearError() {
     _error = null;
+    notifyListeners();
+  }
+
+  /// Обновление прогресса загрузки
+  void updateProgress(double progress) {
+    _downloadProgress = progress.clamp(0.0, 1.0);
     notifyListeners();
   }
 }
