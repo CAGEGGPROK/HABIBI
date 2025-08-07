@@ -4,4 +4,5 @@ class AppRoutes {
   static const String home = '/home';
   static const String tasks = '/tasks';
   static const String settings = '/settings';
+  static const String rpmCreator = '/rpm-creator';
 }

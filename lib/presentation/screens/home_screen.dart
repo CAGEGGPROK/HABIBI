@@ -1,21 +1,20 @@
-import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
-import '../../core/constants/app_routes.dart';
 import '../../data/models/user_model.dart';
 import '../../data/models/task_model.dart';
 import '../../data/storage/user_storage.dart';
 import '../../data/storage/customization_storage.dart';
 import '../../services/task_service.dart';
 import '../../services/stats_service.dart';
-import '../widgets/realistic_3d_character.dart';
+import '../../services/rpm_service.dart';
+import '../widgets/customizable_character.dart';
 import '../widgets/stat_bar.dart';
 import '../widgets/task_card.dart';
 import '../widgets/level_progress_bar.dart';
 import '../screens/create_avatar_screen.dart';
+import '../screens/rpm_creator_screen.dart';
 
 /// Главный экран приложения с персонажем и задачами
 class HomeScreen extends StatefulWidget {
@@ -30,7 +29,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   CharacterCustomization? _customization;
   late AnimationController _avatarAnimationController;
   late Animation<double> _avatarAnimation;
-  
+
   @override
   void initState() {
     super.initState();
@@ -38,14 +37,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _initAnimations();
     _checkDailyLogin();
   }
-  
+
   /// Инициализация анимаций
   void _initAnimations() {
     _avatarAnimationController = AnimationController(
       duration: const Duration(seconds: 2),
       vsync: this,
     );
-    
+
     _avatarAnimation = Tween<double>(
       begin: 0.95,
       end: 1.05,
@@ -53,10 +52,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       parent: _avatarAnimationController,
       curve: Curves.easeInOut,
     ));
-    
+
     _avatarAnimationController.repeat(reverse: true);
   }
-  
+
   /// Загрузка данных пользователя
   Future<void> _loadUser() async {
     final user = await UserStorage.getCurrentUser();
@@ -64,44 +63,44 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       setState(() {
         _user = user;
       });
-      
+
       // Загружаем кастомизацию персонажа
       _customization = await CustomizationStorage.loadCustomization(user.id);
       if (_customization == null) {
         // Если нет сохраненной кастомизации, создаем базовую
-        _customization = CharacterCustomization()
-          ..gender = user.gender;
+        _customization = CharacterCustomization()..gender = user.gender;
       }
       setState(() {});
-      
+
       // Загружаем статистику
       final statsService = context.read<StatsService>();
       await statsService.loadStats(user.id);
-      
+
       // Загружаем задачи
       final taskService = context.read<TaskService>();
       await taskService.loadTasks();
     } else {
       // Если пользователь не найден, возвращаемся на экран создания
-      Navigator.pushReplacementNamed(context, AppRoutes.createAvatar);
+      if (mounted) {
+        Navigator.pushReplacementNamed(context, '/create-avatar');
+      }
     }
   }
-  
+
   /// Проверка ежедневного входа
   Future<void> _checkDailyLogin() async {
     if (_user == null) return;
-    
+
     final now = DateTime.now();
     final lastLogin = _user!.lastLoginAt;
-    
-    if (lastLogin == null || 
-        lastLogin.day != now.day || 
-        lastLogin.month != now.month || 
+
+    if (lastLogin == null ||
+        lastLogin.day != now.day ||
+        lastLogin.month != now.month ||
         lastLogin.year != now.year) {
-      
       // Обновляем дату последнего входа
       _user!.lastLoginAt = now;
-      
+
       // Проверяем серию входов
       if (lastLogin != null) {
         final difference = now.difference(lastLogin).inDays;
@@ -117,15 +116,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         // Первый вход
         _user!.incrementStreak();
       }
-      
+
       await UserStorage.saveUser(_user!);
-      
+
       // Применяем ежедневное ухудшение статов
       final statsService = context.read<StatsService>();
       statsService.applyDailyDecay();
     }
   }
-  
+
   /// Показ анимации серии
   void _showStreakAnimation() {
     showDialog(
@@ -185,18 +184,18 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         ),
       ),
     );
-    
+
     // Добавляем бонусные монеты
     _user!.coins += _user!.currentStreak * 10;
     UserStorage.saveUser(_user!);
   }
-  
+
   @override
   void dispose() {
     _avatarAnimationController.dispose();
     super.dispose();
   }
-  
+
   @override
   Widget build(BuildContext context) {
     if (_user == null) {
@@ -206,11 +205,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         ),
       );
     }
-    
+
     final taskService = context.watch<TaskService>();
     final statsService = context.watch<StatsService>();
     final todayTasks = taskService.getTodayTasks();
-    
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: CustomScrollView(
@@ -263,7 +262,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                 ],
                               ),
                             ),
-                            
+
                             // Кристаллы
                             Container(
                               padding: const EdgeInsets.symmetric(
@@ -292,11 +291,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                 ],
                               ),
                             ),
-                            
+
                             // Настройки
                             IconButton(
                               onPressed: () {
-                                Navigator.pushNamed(context, AppRoutes.settings);
+                                Navigator.pushNamed(context, '/settings');
                               },
                               icon: const Icon(
                                 Icons.settings_rounded,
@@ -306,7 +305,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           ],
                         ),
                       ),
-                      
+
                       // Персонаж с кастомизацией
                       Expanded(
                         child: Center(
@@ -315,28 +314,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             builder: (context, child) {
                               return Transform.scale(
                                 scale: _avatarAnimation.value,
-                                child: _customization != null
-                                    ? Realistic3DCharacter(
-                                        customization: _customization!,
-                                        size: 150,
-                                      )
-                                    : Container(
-                                        width: 150,
-                                        height: 270,
-                                        decoration: BoxDecoration(
-                                          color: AppColors.surfaceVariant,
-                                          borderRadius: BorderRadius.circular(20),
-                                        ),
-                                        child: const Center(
-                                          child: CircularProgressIndicator(),
-                                        ),
-                                      ),
+                                child: _buildAvatarWidget(),
                               );
                             },
                           ),
                         ),
                       ),
-                      
+
                       // Имя и уровень
                       Text(
                         _user!.name,
@@ -347,7 +331,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      
+
                       // Прогресс уровня
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -364,7 +348,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               ),
             ),
           ),
-          
+
           // Статистика персонажа
           SliverToBoxAdapter(
             child: Container(
@@ -400,13 +384,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
-                          color: _getBalanceColor(statsService.currentStats?.lifeBalance ?? 0),
+                          color: _getBalanceColor(
+                              statsService.currentStats?.lifeBalance ?? 0),
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 16),
-                  
+
                   // Статы
                   if (statsService.currentStats != null) ...[
                     StatBar(
@@ -448,7 +433,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               ),
             ),
           ),
-          
+
           // Заголовок задач
           SliverToBoxAdapter(
             child: Padding(
@@ -466,7 +451,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   ),
                   TextButton.icon(
                     onPressed: () {
-                      Navigator.pushNamed(context, AppRoutes.tasks);
+                      Navigator.pushNamed(context, '/tasks');
                     },
                     icon: const Icon(Icons.add_rounded),
                     label: const Text('Добавить'),
@@ -475,7 +460,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               ),
             ),
           ),
-          
+
           // Список задач
           if (todayTasks.isEmpty)
             SliverFillRemaining(
@@ -500,7 +485,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     const SizedBox(height: 8),
                     TextButton(
                       onPressed: () {
-                        Navigator.pushNamed(context, AppRoutes.tasks);
+                        Navigator.pushNamed(context, '/tasks');
                       },
                       child: const Text('Создать первую задачу'),
                     ),
@@ -524,7 +509,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       onLongPress: () {
                         Navigator.pushNamed(
                           context,
-                          AppRoutes.tasks,
+                          '/tasks',
                           arguments: task,
                         );
                       },
@@ -534,18 +519,18 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 childCount: todayTasks.length,
               ),
             ),
-          
+
           // Отступ внизу
           const SliverToBoxAdapter(
             child: SizedBox(height: 16),
           ),
         ],
       ),
-      
+
       // Плавающая кнопка
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
-          Navigator.pushNamed(context, AppRoutes.tasks);
+          Navigator.pushNamed(context, '/tasks');
         },
         backgroundColor: AppColors.primary,
         icon: const Icon(Icons.add_rounded),
@@ -553,7 +538,333 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       ),
     );
   }
-  
+
+  /// Построение виджета аватара (RPM или кастомный)
+  Widget _buildAvatarWidget() {
+    if (_user?.useRpmAvatar == true && _user?.rpmAvatarUrl != null) {
+      // Показываем RPM аватар как превью
+      return GestureDetector(
+        onTap: _showAvatarOptions,
+        onLongPress: _openRPMAvatarInfo,
+        child: Container(
+          width: 150,
+          height: 270,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                AppColors.primary.withOpacity(0.1),
+                AppColors.primaryDark.withOpacity(0.2),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: AppColors.primary,
+              width: 2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withOpacity(0.3),
+                blurRadius: 10,
+                spreadRadius: 2,
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // RPM логотип
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [AppColors.primary, AppColors.primaryDark],
+                  ),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.view_in_ar_rounded,
+                  color: Colors.white,
+                  size: 30,
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Ready Player Me',
+                style: TextStyle(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                '3D Аватар',
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Превью изображение если есть ID
+              if (_user!.rpmAvatarId != null)
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: AppColors.primary.withOpacity(0.3),
+                    ),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.network(
+                      'https://render.readyplayer.me/${_user!.rpmAvatarId}.png?pose=A&expression=neutral&size=256x256',
+                      fit: BoxFit.cover,
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return const Center(
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                                AppColors.primary),
+                          ),
+                        );
+                      },
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                          color: AppColors.surfaceVariant,
+                          child: const Icon(
+                            Icons.person,
+                            color: AppColors.textHint,
+                            size: 40,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    } else if (_customization != null) {
+      // Показываем кастомный персонаж
+      return GestureDetector(
+        onTap: _showAvatarOptions,
+        child: CustomizableCharacter(
+          customization: _customization!,
+          size: 150,
+        ),
+      );
+    } else {
+      // Показываем заглушку
+      return GestureDetector(
+        onTap: _showAvatarOptions,
+        child: Container(
+          width: 150,
+          height: 270,
+          decoration: BoxDecoration(
+            color: AppColors.surfaceVariant,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: AppColors.primary.withOpacity(0.3),
+              width: 2,
+            ),
+          ),
+          child: const Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.person_add_rounded,
+                size: 48,
+                color: AppColors.primary,
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Создать\nаватар',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+  }
+
+  /// Показ информации о RPM аватаре
+  void _openRPMAvatarInfo() {
+    if (_user?.rpmAvatarUrl == null) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Ready Player Me Аватар'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_user!.rpmAvatarId != null)
+              Container(
+                width: 150,
+                height: 150,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.primary),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.network(
+                    'https://render.readyplayer.me/${_user!.rpmAvatarId}.png?pose=A&expression=neutral&size=512x512',
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        color: AppColors.surfaceVariant,
+                        child: const Icon(
+                          Icons.view_in_ar_rounded,
+                          size: 60,
+                          color: AppColors.primary,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            const SizedBox(height: 16),
+            Text(
+              'Персонаж: ${_user!.name}',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'ID: ${_user!.rpmAvatarId ?? "Неизвестно"}',
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Закрыть'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              // Здесь можно добавить просмотр полной 3D модели
+            },
+            child: const Text('3D Просмотр'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Показ опций аватара
+  void _showAvatarOptions() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => _buildAvatarOptionsSheet(),
+    );
+  }
+
+  /// Лист с опциями аватара
+  Widget _buildAvatarOptionsSheet() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: AppColors.textHint,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          const Text(
+            'Настройки аватара',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // Кнопка создания RPM аватара
+          ListTile(
+            leading: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.view_in_ar_rounded,
+                color: AppColors.primary,
+              ),
+            ),
+            title: const Text('Создать 3D аватар'),
+            subtitle: const Text('Ready Player Me'),
+            trailing: const Icon(Icons.arrow_forward_ios),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const RPMCreatorScreen(),
+                ),
+              );
+            },
+          ),
+
+          // Кнопка кастомного персонажа
+          ListTile(
+            leading: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.accent.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.palette_rounded,
+                color: AppColors.accent,
+              ),
+            ),
+            title: const Text('Настроить персонажа'),
+            subtitle: const Text('Кастомизация'),
+            trailing: const Icon(Icons.arrow_forward_ios),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const CreateAvatarScreen(),
+                ),
+              );
+            },
+          ),
+
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+
   /// Выполнение задачи
   Future<void> _completeTask(TaskModel task) async {
     if (task.isCompletedToday()) {
@@ -565,26 +876,26 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       );
       return;
     }
-    
+
     // Отмечаем задачу как выполненную
     final taskService = context.read<TaskService>();
     await taskService.completeTask(task);
-    
+
     // Добавляем опыт и обновляем статы
     final statsService = context.read<StatsService>();
     statsService.increaseStat(task.affectedStat, 5.0);
-    
+
     _user!.addExperience(task.calculatedExpReward);
     _user!.coins += task.calculatedCoinReward;
     _user!.totalTasksCompleted++;
     await UserStorage.saveUser(_user!);
-    
+
     setState(() {});
-    
+
     // Показываем награду
     _showRewardAnimation(task);
   }
-  
+
   /// Показ анимации награды
   void _showRewardAnimation(TaskModel task) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -619,7 +930,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       ),
     );
   }
-  
+
   /// Получение цвета для баланса жизни
   Color _getBalanceColor(double balance) {
     if (balance >= 80) return AppColors.success;

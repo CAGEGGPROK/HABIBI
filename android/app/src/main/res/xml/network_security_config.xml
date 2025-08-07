@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Разрешить HTTP для Ready Player Me доменов -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">models.readyplayer.me</domain>
+        <domain includeSubdomains="true">render.readyplayer.me</domain>
+        <domain includeSubdomains="true">demo.readyplayer.me</domain>
+        <domain includeSubdomains="true">readyplayer.me</domain>
+        <domain includeSubdomains="true">hub.readyplayer.me</domain>
+    </domain-config>
+    
+    <!-- Разрешить HTTPS для всех остальных доменов -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system"/>
+        </trust-anchors>
+    </base-config>
+</network-security-config>

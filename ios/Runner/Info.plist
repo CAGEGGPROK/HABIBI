@@ -45,5 +45,42 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<!-- Добавить в Info.plist перед закрывающим </dict> -->
+
+	<!-- Разрешение на сетевые запросы -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>readyplayer.me</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSExceptionMinimumTLSVersion</key>
+				<string>TLSv1.0</string>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+			</dict>
+			<key>models.readyplayer.me</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+			</dict>
+		</dict>
+	</dict>
+
+	<!-- Поддержка камеры и фото (если нужно) -->
+	<key>NSCameraUsageDescription</key>
+	<string>Приложение использует камеру для создания аватара</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Приложение использует галерею для создания аватара</string>
+
+	<!-- Поддержка файловой системы -->
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>Приложение сохраняет 3D модели аватаров</string>
 </dict>
 </plist>

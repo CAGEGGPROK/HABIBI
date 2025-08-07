@@ -38,13 +38,16 @@ class UserModelAdapter extends TypeAdapter<UserModel> {
       language: fields[18] as String,
       avatarBytes: (fields[19] as List?)?.cast<int>(),
       gender: fields[20] as String,
+      rpmAvatarUrl: fields[21] as String?,
+      rpmAvatarId: fields[22] as String?,
+      useRpmAvatar: fields[23] as bool,
     );
   }
 
   @override
   void write(BinaryWriter writer, UserModel obj) {
     writer
-      ..writeByte(21)
+      ..writeByte(24)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -86,7 +89,13 @@ class UserModelAdapter extends TypeAdapter<UserModel> {
       ..writeByte(19)
       ..write(obj.avatarBytes)
       ..writeByte(20)
-      ..write(obj.gender);
+      ..write(obj.gender)
+      ..writeByte(21)
+      ..write(obj.rpmAvatarUrl)
+      ..writeByte(22)
+      ..write(obj.rpmAvatarId)
+      ..writeByte(23)
+      ..write(obj.useRpmAvatar);
   }
 
   @override

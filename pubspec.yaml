@@ -1,6 +1,7 @@
 name: habit_rpg
-description: RPG gamification for habits and tasks
-publish_to: 'none'
+description: "Игрофицированное приложение для формирования привычек с RPG элементами"
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+
 version: 1.0.0+1
 
 environment:
@@ -9,23 +10,81 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+
+  # Существующие зависимости (проверенные версии)
   hive: ^2.2.3
   hive_flutter: ^1.1.0
   provider: ^6.1.1
-  image_picker: ^1.0.7
-  dio: ^5.4.0
-  path_provider: ^2.1.2
+  image_picker: ^1.0.4
+  path_provider: ^2.1.1
+
+  # Зависимости для Ready Player Me
+  webview_flutter: ^4.4.2
+  dio: ^5.3.2
   path: ^1.8.3
+  url_launcher: ^6.2.1
+  permission_handler: ^11.1.0
+  cached_network_image: ^3.3.0
+
+  # Дополнительные утилиты
+  uuid: ^4.2.2                         # Для генерации уникальных ID
+  connectivity_plus: ^5.0.2            # Проверка интернет соединения
+
+  # The following adds the Cupertino Icons font to your application.
+  # Use with the CupertinoIcons class for iOS style icons.
+  cupertino_icons: ^1.0.2
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  flutter_lints: ^3.0.0
   hive_generator: ^2.0.1
   build_runner: ^2.4.7
-  flutter_lints: ^3.0.0
+  json_annotation: ^4.8.1
 
+  # The "flutter_lints" package below contains a set of recommended lints to
+  # encourage good coding practices. The lint set provided by the package is
+  # activated in the `analysis_options.yaml` file located at the root of your
+  # package. See that file for information about deactivating specific lint
+  # rules and activating additional ones.
+
+# For information on the generic Dart part of this file, see the
+# following page: https://dart.dev/tools/pub/pubspec
+
+# The following section is specific to Flutter packages.
 flutter:
+
+  # The following line ensures that the Material Icons font is
+  # included with your application, so that you can use the icons in
+  # the material Icons class.
   uses-material-design: true
-  
+
+  # To add assets to your application, add an assets section, like this:
   assets:
     - assets/images/
+    - assets/icons/
+    - assets/environment/
+  #   - images/a_dot_ham.jpeg
+
+  # An image asset can refer to one or more resolution-variant files in
+  # the package. See https://flutter.dev/assets-and-images/#resolution-aware
+
+  # For details regarding adding assets from package dependencies, see
+  # https://flutter.dev/assets-and-images/#from-packages
+
+  # To add custom fonts to your application, add a fonts section here,
+  # in this format:
+  # fonts:
+  #   - family: Schyler
+  #     fonts:
+  #       - asset: fonts/Schyler-Regular.ttf
+  #       - asset: fonts/Schyler-Italic.ttf
+  #         style: italic
+  #   - family: Trajan Pro
+  #     fonts:
+  #       - asset: fonts/TrajanPro.ttf
+  #       - asset: fonts/TrajanPro_Bold.ttf
+  #         weight: 700
+  #
+  # For details regarding fonts from package dependencies,
+  # see https://flutter.dev/custom-fonts/#from-packages
